@@ -11,7 +11,7 @@ Turn a raw, unreliable sales export into a dataset that can be trusted for analy
 | File | Description |
 |---|---|
 | `dirty_cafe_sales.csv` | Raw input: 10,000 rows, 8 columns |
-| `CleanedCafeSalesDataset.csv` | Cleaned output: 9,994 rows, 9 columns (adds `Day of the week`) |
+| `CleanedCafeSalesDataset_1.csv` | Cleaned output: 9,994 rows, 9 columns (adds `Day of the week`) |
 
 Columns: `Transaction ID`, `Item`, `Quantity`, `Price Per Unit`, `Total Spent`, `Payment Method`, `Location`, `Transaction Date`.
 
@@ -27,7 +27,7 @@ Source: the public "Dirty Cafe Sales" practice dataset (Kaggle). `TODO: add the 
 | Column | Unusable in raw data | Missing in cleaned data |
 |---|---:|---:|
 | Transaction ID | 0 | 0 |
-| Item | 969 | 0 |
+| Item | 969 | 0 (see Known issues) |
 | Quantity | 479 | 20 |
 | Price Per Unit | 533 | 0 |
 | Total Spent | 502 | 20 |
@@ -60,7 +60,7 @@ Before filling anything, I checked what relationships the data obeys:
 Important limit: **Cake and Juice both cost 3.0, and Sandwich and Smoothie both cost 4.0**, so a price alone cannot identify the item for those four. Only prices 1.0 (Cookie), 1.5 (Tea), 2.0 (Coffee) and 5.0 (Salad) point to a single item.
 
 ### 5. Recover missing values
-Used the rules above to recover Item, Price Per Unit, Quantity and Total Spent where the other fields made it possible. `TODO: describe the exact method and order you used.`
+Used the rules above to recover Price Per Unit, Quantity and Total Spent where the other fields made it possible, and Item where the price pointed to a single item. `TODO: describe the exact method and order you used.`
 
 ### 6. Handle what can't be recovered
 - **Payment Method (3,175 missing) and Location (3,958 missing):** nothing else in the row implies them, and filling with the most common value would invent data, so they stay missing.
@@ -68,8 +68,10 @@ Used the rules above to recover Item, Price Per Unit, Quantity and Total Spent w
 - **6 rows were dropped** because too many core fields were missing at once to recover anything (for example, Item, Price and Total all unknown). Their IDs: `TXN_3611851`, `TXN_7524977`, `TXN_7376255`, `TXN_9646000`, `TXN_1082717`, `TXN_1208561`.
 - **20 rows** still have Quantity and Total Spent both missing (the price is known, but neither can be calculated).
 
-### 7. Validate
-Checks run on the cleaned file:
+### 7. Validate and fix
+Validation after the first cleaning pass found 64 rows where Quantity x Price did not equal Total. All were Salad rows with a price of 3.0 instead of 5.0, which also caused a Quantity of 1.667. I corrected those prices (66 Price Per Unit values changed in total) and re-ran every check.
+
+Checks on the final file:
 
 | Check | Result |
 |---|---|
@@ -77,17 +79,16 @@ Checks run on the cleaned file:
 | Leftover `ERROR`/`UNKNOWN` strings | 0 |
 | Dates that fail to parse | 0 |
 | Weekday does not match date | 0 |
-| Quantity x Price = Total | **64 failures** (see below) |
-| Item agrees with its fixed price | **66 mismatches** (see below) |
+| Non-whole-number quantities | 0 |
+| Quantity x Price = Total | 0 failures out of 9,974 rows |
+| Item agrees with its fixed price | 0 mismatches |
+| Date range | 2023-01-01 to 2023-12-31 |
 
 ## Known issues
 
-Validation found problems in the cleaned file. They are listed here rather than hidden.
-
-1. **64 rows break Quantity x Price = Total.** All are Salad rows with a Price Per Unit of 3.0, while the totals imply the correct Salad price of 5.0. 66 rows in total have an Item that disagrees with its fixed price. These look like prices filled in incorrectly during recovery. `TODO: fix, then update this section.`
-2. **Item values for ambiguous prices were guessed.** Of 963 recovered Item values, 474 had a price of 3.0 or 4.0, which cannot identify a single item. In the cleaned file, every one of those 474 was assigned **Juice (247) or Smoothie (227)**, and none to Cake or Sandwich. This inflates Juice and Smoothie counts and understates Cake and Sandwich, so per-item analysis is unreliable until this is fixed. `TODO: set these to missing, or document why a guess is acceptable.`
-3. **Payment Method, Location and Date** are permanently incomplete, so any analysis using them covers only part of the data.
-4. The dataset is synthetic practice data, so results should not be treated as real business findings.
+1. **Item values for ambiguous prices were guessed.** Of 963 recovered Item values, 474 had a price of 3.0 or 4.0, which cannot identify a single item. Every one of those 474 was assigned **Juice (247) or Smoothie (227)**, and none to Cake or Sandwich. These guesses pass every validation check because they are consistent with the price, but they are wrong in roughly half of cases. They inflate Juice and Smoothie counts and understate Cake and Sandwich, so per-item analysis is unreliable. `TODO: set these 474 to missing, or document why keeping the guess is acceptable, then update this section.`
+2. **Payment Method, Location and Date** are permanently incomplete, so any analysis using them covers only part of the data.
+3. The dataset is synthetic practice data, so results should not be treated as real business findings.
 
 ## Results
 
@@ -96,11 +97,12 @@ Validation found problems in the cleaned file. They are listed here rather than 
 | Rows | 10,000 | 9,994 |
 | Numeric columns stored as numbers | 0 of 3 | 3 of 3 |
 | `ERROR`/`UNKNOWN` strings | thousands | 0 |
-| Item, Price Per Unit fully populated | no | yes |
-| Rows failing Quantity x Price = Total | n/a | 64 |
+| Rows with all four core fields (Item, Quantity, Price, Total) | n/a | 9,974 |
+| Rows failing Quantity x Price = Total | n/a | 0 |
+| Item values that are guesses | n/a | 474 |
 
 ## What I learned
-`TODO: write 2-3 honest lines in your own words. For example: recovering values is only half the job, and the validation step is what shows whether the recovery was correct.`
+`TODO: write 2-3 honest lines in your own words. For example: recovering values is only half the job. Validation caught wrong prices that looked fine, and it also showed that some guesses can pass every check and still be wrong.`
 
 ## How to run
 
@@ -115,6 +117,6 @@ python clean_cafe_sales.py
 Python 3, pandas.
 
 ## Possible next steps
-- Fix the known issues above, then re-run the validation.
+- Resolve the 474 guessed Item values, then update the Results table.
 - Answer business questions with the cleaned data: best-selling item, revenue by month, in-store vs takeaway.
 - Repeat the same queries in SQL (SQLite) and confirm the results match pandas.
